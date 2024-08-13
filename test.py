@@ -13,14 +13,14 @@ DOLARHOY_URL = "https://dolarhoy.com/"
 FOROBETA_URL = "https://forobeta.com/"
 MYPAYO_URL = "https://mipayo.com/foro/viewforum.php?f=14"
 
-# no pushear, y hacer archivo de configs
+# TODO - No pushear, y hacer archivo de configs para las passwords
 FOROBETA_USERNAME = "RamonAbila.3"
 FOROBETA_PASSWORD = "-"
 MYPAYO_USERNAME = "ramonabila.3"
 MYPAYO_PASSWORD = "-"
 
-FOROBETA_POST_URL = ""
-MYPAYO_POST_URL = ""
+FOROBETA_POST_URL = "https://forobeta.com/temas/compro-tu-saldo-payoneer-wise-y-binance-reputacion-intachable.1005420/page-2#post-9315256"
+MYPAYO_POST_URL = "https://mipayo.com/foro/viewtopic.php?f=14&t=2685"
 EXCHANGE_FORUM_MESSAGE = """Seguimos cambiando! Los espero por este medio o VIA Whatsapp!
 La mejor cotizacion SIEMPRE!
 
@@ -34,16 +34,15 @@ ONLY_PAYO = False
 
 def main_function():
     
-    # poner todos los waiters en base a una clase wait para que funcione todo mejor mas que nada forobeta que tardan en cargar
-    
+    # TODO - Poner todos los waiters en base a una clase wait para que funcione todo mejor mas que nada forobeta que tardan en cargar
     driver = driver_initialization()
     driver.maximize_window()
     driver.get(DOLARHOY_URL)
     
     RDA_COMISSION = float(input("Enter the commission to use in this execution (0.85 is the minimum): "))
-    ONLY_PAYO = bool(input("Only Payoneer text? (YES/NO): "))
-    PUBLISH_COTIZATIONS = bool(input("Do you want to publish in forums? (YES/NO): "))
-    
+    ONLY_PAYO = input("Only Payoneer text? (YES/NO): ").strip().lower() in ("y", "yes")
+    PUBLISH_COTIZATIONS = input("Do you want to publish in forums? (YES/NO): ").strip().lower() in ("y", "yes")
+     
     buy_element = driver.find_element(By.CLASS_NAME, "compra").text
     sell_element = driver.find_element(By.CLASS_NAME, "venta").text
     
@@ -84,7 +83,6 @@ def main_function():
     print("\r")
     print("\r")
     
-    
     if not ONLY_PAYO:
         print("Estamos cambiando como minimo 150 usd.")
         print("Te paso la ultima cotización del día! . Trabajamos también los fines de semana, 24 HS disponibles!")
@@ -108,12 +106,13 @@ def main_function():
         print(str((cotization1)) + " menos de 400 USD Payoneer")
         print(str((cotization1+1)) + " entre 400 y 800 USD Payoneer")
         print(str((cotization1+2)) + " mas de 800 USD Payoneer")
-    
         
     if PUBLISH_COTIZATIONS:
+        
+        # TODO - Resolver todos los temas forobeta con codigos de autenticacion, ver temas de sesiones y cookies para loguearme ahi
         driver.get(FOROBETA_URL)
         driver.find_element(By.XPATH, "//span[@class='p-navgroup-linkText' and text()='Acceder']").click()
-        time.sleep(1.5)
+        time.sleep(3)
         driver.find_element(By.XPATH, "//input[@name='login']").send_keys(FOROBETA_USERNAME)
         driver.find_element(By.XPATH, "//input[@name='password']").send_keys(FOROBETA_PASSWORD)
         driver.find_element(By.XPATH, "//button[contains(@class, 'button--primary') and contains(@class, 'button') and contains(@class, 'button--icon') and contains(@class, 'button--icon--login')]").click()
