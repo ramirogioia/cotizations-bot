@@ -1,156 +1,342 @@
+import os
 import math
-import time
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service as ChromeService
-from chromedriver_autoinstaller import install as chrome_driver_install
+import json
+import logging
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Tuple, Optional
+
+import requests
 
 
+# =========================
+# LOGGING (ES)
+# =========================
+def configurar_logger() -> logging.Logger:
+    os.makedirs("logs", exist_ok=True)
 
-BINANCE_URL = "https://p2p.binance.com/en/trade/sell/USDT?fiat=ARS&payment=all-payments"
-DOLARHOY_URL = "https://dolarhoy.com/"
-FOROBETA_URL = "https://forobeta.com/"
-MYPAYO_URL = "https://mipayo.com/foro/viewforum.php?f=14"
+    nivel_str = os.getenv("LOG_LEVEL", "INFO").upper().strip()
+    nivel = getattr(logging, nivel_str, logging.INFO)
 
-# TODO - No pushear, y hacer archivo de configs para las passwords
-FOROBETA_USERNAME = "RamonAbila.3"
-FOROBETA_PASSWORD = "-"
-MYPAYO_USERNAME = "ramonabila.3"
-MYPAYO_PASSWORD = "-"
+    logger = logging.getLogger("cotizations-bot")
+    logger.setLevel(nivel)
+    logger.handlers.clear()
 
-FOROBETA_POST_URL = "https://forobeta.com/temas/compro-tu-saldo-payoneer-wise-y-binance-reputacion-intachable.1005420/page-2#post-9315256"
-MYPAYO_POST_URL = "https://mipayo.com/foro/viewtopic.php?f=14&t=2685"
-EXCHANGE_FORUM_MESSAGE = """Seguimos cambiando! Los espero por este medio o VIA Whatsapp!
-La mejor cotizacion SIEMPRE!
+    formato = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
-https://wa.link/ramonabila"""
+    ch = logging.StreamHandler()
+    ch.setLevel(nivel)
+    ch.setFormatter(formato)
+    logger.addHandler(ch)
 
-SHORT_TIMEOUT = 1.5
-DRIVER_PATH = '../chromedriver.exe'
-RDA_COMISSION = 0.85
-BINANCE_COMISSION_TO_SUBSTRACT = 0.96
-ONLY_PAYO = False
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ruta_log = os.path.join("logs", f"run_{ts}.log")
+    fh = logging.FileHandler(ruta_log, encoding="utf-8")
+    fh.setLevel(nivel)
+    fh.setFormatter(formato)
+    logger.addHandler(fh)
 
-def main_function():
-    
-    # TODO - Poner todos los waiters en base a una clase wait para que funcione todo mejor mas que nada forobeta que tardan en cargar
-    driver = driver_initialization()
-    driver.maximize_window()
-    driver.get(DOLARHOY_URL)
-    
-    RDA_COMISSION = float(input("Enter the commission to use in this execution (0.85 is the minimum): "))
-    ONLY_PAYO = input("Only Payoneer text? (YES/NO): ").strip().lower() in ("y", "yes")
-    PUBLISH_COTIZATIONS = input("Do you want to publish in forums? (YES/NO): ").strip().lower() in ("y", "yes")
-     
-    buy_element = driver.find_element(By.CLASS_NAME, "compra").text
-    sell_element = driver.find_element(By.CLASS_NAME, "venta").text
-    
-    driver.get(BINANCE_URL)
-    try:
-        time.sleep(4)
-        driver.find_element(By.ID, "onetrust-accept-btn-handler").click()
-        print("Accepting coockies.")
-    except:
-        print("Coockies button not detected.")
-    
-    cotizations = driver.find_elements(By.XPATH, "//*[contains(@class, 'headline5') and contains(@class, 'mr-4xs') and contains(@class, 'text-primaryText')]")
-    cotization_text1 = cotizations[-1].text
-    cotization_text2 = cotizations[0].text
-    cotization_text1 = cotization_text1.replace(',', '')
-    cotization_text2 = cotization_text2.replace(',', '')
-    cotization1 = float(cotization_text1)
-    cotization2 = float(cotization_text2)
-    
-    print("\r")
-    
-    print(f"Dolar Blue {sell_element}")
-    print(f"Dolar Blue {buy_element}")
-    
-    print("\r")
-    print("\r")
-    
-    print("COTIZACION MAS ALTA BINANCE: " + str(cotization2))
-    print("COTIZACION MAS BAJA BINANCE: " + str(cotization1))
-    
-    internal_cotization = (((cotization2-cotization1)/2)+cotization1) * BINANCE_COMISSION_TO_SUBSTRACT
-    internal_cotization = round(internal_cotization, 2)
-    
-    print(f"Valor real que me queda por Wise/Payoneer: {internal_cotization}")
-    cotization1 = math.floor(cotization1 * RDA_COMISSION)
-    print("COTIZACION FINAL CON COMISION (APLICADA A LA MAS BAJA): " + str(cotization1))
-    
-    print("\r")
-    print("\r")
-    
-    if not ONLY_PAYO:
-        print("Estamos cambiando como minimo 150 usd.")
-        print("Te paso la ultima cotización del día! . Trabajamos también los fines de semana, 24 HS disponibles!")
-        print("También compramos saldo BINANCE! ")
-        print("\r")
-        print(str((cotization1+4)) + " menos de 600 USD Binance")
-        print(str((cotization1+5)) + " mas de 600 USD Binance")
-        print("\r")
-        print(str((cotization1)) + " menos de 400 USD Payoneer")
-        print(str((cotization1+1)) + " entre 400 y 800 USD Payoneer")
-        print(str((cotization1+2)) + " mas de 800 USD Payoneer")
-        print("\r")
-        print(str((cotization1+2)) + " menos de 400 USD Wise/TransferWise")
-        print(str((cotization1+3)) + " entre 400 y 800 USD Wise/TransferWise")
-        print(str((cotization1+4)) + " mas de 800 USD Wise/TransferWise")
-    else:
-        print("Estamos cambiando como minimo 150 usd.")
-        print("Te paso la ultima cotización del día! . Trabajamos también los fines de semana, 24 HS disponibles!")
-        print("También compramos saldo BINANCE! ")
-        print("\r")
-        print(str((cotization1)) + " menos de 400 USD Payoneer")
-        print(str((cotization1+1)) + " entre 400 y 800 USD Payoneer")
-        print(str((cotization1+2)) + " mas de 800 USD Payoneer")
-        
-    if PUBLISH_COTIZATIONS:
-        
-        # TODO - Resolver todos los temas forobeta con codigos de autenticacion, ver temas de sesiones y cookies para loguearme ahi
-        driver.get(FOROBETA_URL)
-        driver.find_element(By.XPATH, "//span[@class='p-navgroup-linkText' and text()='Acceder']").click()
-        time.sleep(3)
-        driver.find_element(By.XPATH, "//input[@name='login']").send_keys(FOROBETA_USERNAME)
-        driver.find_element(By.XPATH, "//input[@name='password']").send_keys(FOROBETA_PASSWORD)
-        driver.find_element(By.XPATH, "//button[contains(@class, 'button--primary') and contains(@class, 'button') and contains(@class, 'button--icon') and contains(@class, 'button--icon--login')]").click()
-        time.sleep(5)
-        
-        driver.get(FOROBETA_POST_URL)
-        driver.find_element(By.XPATH, "//div[@class='fr-wrapper show-placeholder']").send_keys(EXCHANGE_FORUM_MESSAGE)
-        driver.find_element(By.XPATH, "//span[contains(@class, 'button-text') and contains(text(), 'Responder')]").click()
+    logger.info(f"Logger inicializado. Nivel={nivel_str}. Archivo={ruta_log}")
+    return logger
 
+
+# =========================
+# CONFIG (SIN INPUTS)
+# =========================
+@dataclass(frozen=True)
+class Config:
+    RDA_COMMISSION: float = 0.87
+    BINANCE_COMMISSION_TO_SUBSTRACT: float = 0.96
+
+    ONLY_PAYO: bool = False
+    PUBLISH_COTIZATIONS: bool = False
+
+    # Dolarhoy: usá la página específica del blue (la que vos estás mirando)
+    DOLARHOY_URLS: Tuple[str, ...] = (
+        "https://dolarhoy.com/cotizacion-dolar-blue",
+        "https://dolarhoy.com/cotizaciondolarblue",
+    )
+
+    BINANCE_P2P_API_URL: str = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+
+    FIAT: str = "ARS"
+    ASSET: str = "USDT"
+    TRADE_TYPE: str = "SELL"
+
+    ROWS: int = 20
+
+    HTTP_TIMEOUT_SECS: int = 25
+    HTTP_RETRIES: int = 3
+
+
+cfg = Config()
+
+FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSer5Xb5IZs21XdsdJqBXhdhZRCtvHsVe9iywJ1_ouiUEmSQuQ/formResponse"
+FORM_FIELDS = {
+    "blue_compra": "entry.1296954884",
+    "blue_venta": "entry.2063587065",
+    "binance_low": "entry.1697056713",
+    "valor_real": "entry.861833082",
+    "cotizacion_final": "entry.1842390756",
+    "comision_aplicada": "entry.71619083",
+}
+
+
+# =========================
+# HTTP helpers
+# =========================
+def crear_sesion() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+    })
+    return s
+
+
+def request_seguro(method: str, url: str, logger: logging.Logger, session: requests.Session, **kwargs) -> requests.Response:
+    ultimo_error: Optional[Exception] = None
+    for intento in range(1, cfg.HTTP_RETRIES + 1):
         try:
-            element = driver.find_element(By.XPATH, "//time[contains(text(), 'Hace un momento')]")
-            print("Comment posting successfully (Forobeta).")
-        except NoSuchElementException:
-            print("Comment posting generated an error (Forobeta).")
+            logger.debug(f"HTTP {method} intento {intento}/{cfg.HTTP_RETRIES}: {url}")
+            r = session.request(method, url, timeout=cfg.HTTP_TIMEOUT_SECS, **kwargs)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            ultimo_error = e
+            logger.warning(f"Error HTTP (intento {intento}/{cfg.HTTP_RETRIES}) hacia {url}: {e}")
+    raise RuntimeError(f"Fallo HTTP luego de {cfg.HTTP_RETRIES} reintentos: {url}. Último error: {ultimo_error}")
 
-        driver.get(MYPAYO_URL)
-        # cONTINUE
-    
-    driver.quit()   
-            
-    
-def driver_initialization():    
-        chrome_driver_install()
-        
-        coptions = webdriver.ChromeOptions()
-        coptions.add_argument('--ignore-certificate-errors')
-        coptions.add_argument('--disable-extensions')
-        # coptions.add_argument('--headless')
-        coptions.add_argument('--disable-gpu')
-        coptions.add_argument('--no-sandbox')
-        coptions.add_argument('--disable-dev-shm-usage')
-        coptions.add_argument("--log-level=3")
-        
-        service = ChromeService(log_path='NUL')
 
-        return webdriver.Chrome(service=service, options=coptions)
-    
+# =========================
+# Parsing de montos
+# =========================
+def _parsear_monto(monto: str) -> float:
+    s = monto.strip().replace("$", "").strip()
 
-    
+    # Caso AR típico: 1.485,00 -> 1485.00
+    if "." in s and "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        if "," in s and "." not in s:
+            s = s.replace(",", ".")
+    return float(s)
+
+
+def _formatear_pesos(valor: float) -> str:
+    if abs(valor - round(valor)) < 1e-9:
+        return str(int(round(valor)))
+    return f"{valor:.2f}"
+
+
+# =========================
+# DOLARHOY (Blue) - parser por estructura topic/value
+# =========================
+def obtener_dolar_blue(logger: logging.Logger, session: requests.Session) -> Tuple[float, float]:
+    """
+    Parseo basado en tu estructura real:
+    <div class="topic">Compra</div><div class="value">$1485,00</div>
+    <div class="topic">Venta</div><div class="value">$1505,00</div>
+    """
+    import re
+
+    logger.info("Obteniendo Dólar Blue desde Dolarhoy...")
+
+    # Regex estricta a topic/value
+    patron_compra = re.compile(
+        r'<div\s+class="topic">\s*Compra\s*</div>\s*<div\s+class="value">\s*\$?\s*([0-9\.,]+)\s*</div>',
+        re.IGNORECASE | re.DOTALL
+    )
+    patron_venta = re.compile(
+        r'<div\s+class="topic">\s*Venta\s*</div>\s*<div\s+class="value">\s*\$?\s*([0-9\.,]+)\s*</div>',
+        re.IGNORECASE | re.DOTALL
+    )
+
+    ultimo_html: Optional[str] = None
+    ultima_url: Optional[str] = None
+
+    for url in cfg.DOLARHOY_URLS:
+        logger.info(f"Consultando: {url}")
+        try:
+            r = request_seguro("GET", url, logger, session)
+            html = r.text
+            ultimo_html = html
+            ultima_url = url
+
+            # Ubicamos el bloque real de cotizacion_moneda.
+            # Usamos rfind para esquivar definiciones de CSS en el <head>.
+            lower = html.lower()
+            idx = lower.rfind("cotizacion_moneda")
+            ventana = html[idx:] if idx != -1 else html
+
+            m_c = patron_compra.search(ventana) or patron_compra.search(html)
+            m_v = patron_venta.search(ventana) or patron_venta.search(html)
+
+            if not m_c or not m_v:
+                logger.warning(f"No se encontró Compra/Venta en {url} (sigo probando otra URL).")
+                continue
+
+            compra = _parsear_monto(m_c.group(1))
+            venta = _parsear_monto(m_v.group(1))
+
+            logger.info(f"Dólar Blue obtenido OK desde {url}: compra={_formatear_pesos(compra)} venta={_formatear_pesos(venta)}")
+            return compra, venta
+
+        except Exception as e:
+            logger.warning(f"Error consultando/parsing Dolarhoy en {url}: {e}")
+
+    logger.error("No se pudo parsear Compra/Venta en Dolarhoy. Guardando HTML en logs/dolarhoy_debug.html")
+    if ultimo_html is not None:
+        with open("logs/dolarhoy_debug.html", "w", encoding="utf-8") as f:
+            f.write(f"<!-- URL: {ultima_url} -->\n\n")
+            f.write(ultimo_html)
+
+    raise RuntimeError("No se pudo parsear el Dólar Blue (compra/venta) desde Dolarhoy (cambió el HTML).")
+
+
+# =========================
+# BINANCE P2P - API
+# =========================
+def obtener_precios_binance_p2p(logger: logging.Logger, session: requests.Session) -> List[float]:
+    payload = {
+        "page": 1,
+        "rows": cfg.ROWS,
+        "payTypes": [],
+        "asset": cfg.ASSET,
+        "fiat": cfg.FIAT,
+        "tradeType": cfg.TRADE_TYPE,
+    }
+
+    logger.info(f"Obteniendo Binance P2P por API: asset={cfg.ASSET} fiat={cfg.FIAT} tradeType={cfg.TRADE_TYPE} rows={cfg.ROWS}")
+    r = request_seguro("POST", cfg.BINANCE_P2P_API_URL, logger, session, json=payload)
+
+    raw = r.text
+    try:
+        data = r.json()
+    except Exception:
+        logger.error("Binance no devolvió JSON. Guardando respuesta cruda en logs/binance_raw.txt")
+        with open("logs/binance_raw.txt", "w", encoding="utf-8") as f:
+            f.write(raw)
+        raise RuntimeError("La respuesta de Binance no es JSON (posible bloqueo o cambio del endpoint).")
+
+    ofertas = data.get("data") or []
+    if not ofertas:
+        logger.error("Binance devolvió JSON sin ofertas. Guardando en logs/binance_empty.json")
+        with open("logs/binance_empty.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        raise RuntimeError("Binance devolvió 0 ofertas (posible bloqueo/región/cambio).")
+
+    precios: List[float] = []
+    for item in ofertas:
+        adv = item.get("adv") or {}
+        price_str = adv.get("price")
+        if price_str:
+            try:
+                precios.append(float(price_str))
+            except ValueError:
+                logger.debug(f"Precio no parseable (se omite): {price_str}")
+
+    if not precios:
+        logger.error("No se pudo extraer adv.price. Guardando JSON en logs/binance_badshape.json")
+        with open("logs/binance_badshape.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        raise RuntimeError("No se pudieron parsear precios desde la respuesta de Binance.")
+
+    logger.info(f"Precios Binance OK: cantidad={len(precios)} min={min(precios)} max={max(precios)}")
+    return precios
+
+
+# =========================
+# Cálculos
+# =========================
+def calcular_valor_real_wise_payo(low: float, high: float) -> float:
+    internal = (((high - low) / 2) + low) * cfg.BINANCE_COMMISSION_TO_SUBSTRACT
+    return round(internal, 2)
+
+
+def calcular_cotizacion_final(binance_low: float) -> int:
+    return math.floor(binance_low * cfg.RDA_COMMISSION)
+
+
+def enviar_a_form(logger: logging.Logger, valores: dict) -> None:
+    """
+    Publica los valores en el Google Form vinculado a la Sheet.
+    Espera claves:
+      blue_compra, blue_venta, binance_low, valor_real,
+      cotizacion_final, comision_aplicada
+    """
+    payload = {}
+    for clave, entry_id in FORM_FIELDS.items():
+        if clave in valores:
+            payload[entry_id] = valores[clave]
+    if not payload:
+        logger.debug("Payload de Google Form vacío; no se envía nada.")
+        return
+
+    r = requests.post(FORM_URL, data=payload, timeout=10)
+    if r.status_code != 200:
+        logger.warning(f"Google Form devolvió status {r.status_code}: {r.text[:200]}")
+    else:
+        logger.info("Valores publicados en Google Form/Sheet correctamente.")
+
+
+# =========================
+# MAIN
+# =========================
+def main() -> int:
+    logger = configurar_logger()
+    session = crear_sesion()
+
+    logger.info("Iniciando ejecución...")
+    logger.info(f"Configuración: comisión={cfg.RDA_COMMISSION} ONLY_PAYO={cfg.ONLY_PAYO} PUBLICAR_FOROS={cfg.PUBLISH_COTIZATIONS}")
+
+    blue_compra, blue_venta = obtener_dolar_blue(logger, session)
+
+    precios = obtener_precios_binance_p2p(logger, session)
+    binance_low = min(precios)
+    binance_high = max(precios)
+
+    valor_real = calcular_valor_real_wise_payo(binance_low, binance_high)
+    cotizacion_final = calcular_cotizacion_final(binance_low)
+
+    # OUTPUT (como pediste)
+    print("")
+    print(f"Dólar Blue (compra): {_formatear_pesos(blue_compra)}")
+    print(f"Dólar Blue (venta):  {_formatear_pesos(blue_venta)}")
+    print(f"Dólar Binance cambio (low): {binance_low}")
+    print(f"Valor real que me queda por Wise/Payoneer: {valor_real}")
+    print(f"COTIZACIÓN FINAL con comisión ({cfg.RDA_COMMISSION}) aplicada: {cotizacion_final}")
+    print("")
+
+    logger.info("Salida generada correctamente.")
+    logger.info(
+        "Resumen -> "
+        f"blue_compra={_formatear_pesos(blue_compra)} | "
+        f"blue_venta={_formatear_pesos(blue_venta)} | "
+        f"binance_low={binance_low} | "
+        f"valor_real={valor_real} | "
+        f"cotizacion_final={cotizacion_final}"
+    )
+
+    try:
+        enviar_a_form(logger, {
+            "blue_compra": _formatear_pesos(blue_compra),
+            "blue_venta": _formatear_pesos(blue_venta),
+            "binance_low": f"{binance_low}",
+            "valor_real": _formatear_pesos(valor_real),
+            "cotizacion_final": f"{cotizacion_final}",
+            "comision_aplicada": f"{cfg.RDA_COMMISSION}",
+        })
+    except Exception as e:
+        logger.warning(f"No se pudo enviar al Google Form: {e}")
+
+    logger.info("Ejecución finalizada OK.")
+    return 0
+
+
 if __name__ == "__main__":
-    main_function()
+    raise SystemExit(main())
