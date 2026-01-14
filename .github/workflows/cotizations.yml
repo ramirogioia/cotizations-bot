@@ -2,8 +2,8 @@ name: Cotizations Bot
 
 on:
   schedule:
-    # 10:00–20:59 Argentina (UTC-3) → 13–23 UTC
-    - cron: "0 13-23 * * *"
+    # 11:00, 14:00, 17:00 (AR, UTC-3) -> 14, 17, 20 UTC
+    - cron: "0 14,17,20 * * *"
   workflow_dispatch:
 
 jobs:
